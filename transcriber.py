@@ -145,14 +145,18 @@ class WhisperAPITranscriber(AudioTranscriber):
         return WhisperAPITranscriber(base_url, model_name)
 
     def transcribe_audio(self, audio: io.BytesIO) -> str:
+        prompt = "The following is normal speech."
         try:
             transcription = self.client.audio.transcriptions.create(
                 model=self.model_name,
                 file=audio,
                 response_format="text",
                 language="en",
-                prompt="The following is normal speech or technical speech from an engineer.",
+                prompt=prompt,
             )
+            # Remove the prompt from the transcription if it appears
+            if isinstance(transcription, str):
+                return transcription.replace(prompt, "").strip()
             return transcription
         except Exception as e:
             print(f"Encountered Error: {e}")

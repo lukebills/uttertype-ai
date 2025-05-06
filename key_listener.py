@@ -97,21 +97,19 @@ class KeyListener:
             elif hasattr(key, 'name'):
                 self.pressed_keys.add(key.name)
             
-            # Only check for hotkeys if we have exactly the right number of keys pressed
-            # and we're not already recording
+            # Only check for hotkeys if we're not already recording
             if not self.recording:
-                if len(self.pressed_keys) == len(self.normal_keys):  # Check exact match for normal hotkey
-                    if self._check_hotkey(self.pressed_keys, self.normal_keys):
-                        self.recording = True
-                        self.ai_formatting_requested = False
-                        self.current_hotkey = 'normal'
-                        self.transcriber.start_recording()
-                elif len(self.pressed_keys) == len(self.ai_keys):  # Check exact match for AI hotkey
-                    if self._check_hotkey(self.pressed_keys, self.ai_keys):
-                        self.recording = True
-                        self.ai_formatting_requested = True
-                        self.current_hotkey = 'ai'
-                        self.transcriber.start_recording()
+                # Check for exact matches with either hotkey combination
+                if self._check_hotkey(self.pressed_keys, self.normal_keys):
+                    self.recording = True
+                    self.ai_formatting_requested = False
+                    self.current_hotkey = 'normal'
+                    self.transcriber.start_recording()
+                elif self._check_hotkey(self.pressed_keys, self.ai_keys):
+                    self.recording = True
+                    self.ai_formatting_requested = True
+                    self.current_hotkey = 'ai'
+                    self.transcriber.start_recording()
         except AttributeError:
             pass
 
@@ -123,14 +121,13 @@ class KeyListener:
             elif hasattr(key, 'name'):
                 self.pressed_keys.discard(key.name)
             
-            # If we were recording and any of the hotkey keys were released, stop recording
+            # If we were recording, stop recording
             if self.recording:
-                if self.current_hotkey == 'normal' and not self._check_hotkey(self.pressed_keys, self.normal_keys):
-                    self.recording = False
-                    self.transcriber.stop_recording()
-                elif self.current_hotkey == 'ai' and not self._check_hotkey(self.pressed_keys, self.ai_keys):
-                    self.recording = False
-                    self.transcriber.stop_recording()
+                self.recording = False
+                self.transcriber.stop_recording()
+                # Clear all pressed keys to prevent any delayed triggers
+                self.pressed_keys.clear()
+                self.current_hotkey = None
         except AttributeError:
             pass
 

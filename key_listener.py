@@ -1,6 +1,8 @@
 import os
 import sys
 from pynput.keyboard import HotKey
+from pynput import keyboard
+from transcriber import WhisperAPITranscriber
 
 
 class HoldHotKey(HotKey):
@@ -47,19 +49,101 @@ class HoldGlobeKey:
         self.press(key)
 
 
-def create_keylistener(transcriber, env_var="UTTERTYPE_RECORD_HOTKEYS"):
-    key_code = os.getenv(env_var, "")
+class KeyListener:
+    def __init__(self, transcriber: WhisperAPITranscriber):
+        self.transcriber = transcriber
+        self.recording = False
+        self.ai_formatting_requested = False
+        self.pressed_keys = set()
+        self.current_hotkey = None  # Track which hotkey is active
+        
+        # Get hotkey combinations from .env
+        normal_hotkey = os.getenv('UTTERTYPE_NORMAL_HOTKEY', '<ctrl>+<alt>+v')
+        ai_hotkey = os.getenv('UTTERTYPE_AI_HOTKEY', '<ctrl>+<alt>+b')
+        
+        # Parse hotkey combinations
+        self.normal_keys = self._parse_hotkey(normal_hotkey)
+        self.ai_keys = self._parse_hotkey(ai_hotkey)
 
-    if (sys.platform == "darwin") and (key_code in ["<globe>", ""]):
+    def _parse_hotkey(self, hotkey_str: str) -> set:
+        """Parse hotkey string from .env into a set of key names."""
+        keys = set()
+        for key in hotkey_str.split('+'):
+            key = key.strip().lower()
+            if key == '<ctrl>':
+                keys.add('ctrl')
+            elif key == '<shift>':
+                keys.add('shift')
+            elif key == '<alt>':
+                keys.add('alt')
+            elif key == '<space>':
+                keys.add('space')
+            elif key == 'v':
+                keys.add('v')
+            elif key == 'b':
+                keys.add('b')
+            # Add more key mappings as needed
+        return keys
+
+    def _check_hotkey(self, pressed_keys: set, target_keys: set) -> bool:
+        """Check if the currently pressed keys match the target hotkey combination."""
+        return pressed_keys == target_keys
+
+    def press(self, key):
+        try:
+            # Add the pressed key to our set
+            if hasattr(key, 'char'):
+                self.pressed_keys.add(key.char)
+            elif hasattr(key, 'name'):
+                self.pressed_keys.add(key.name)
+            
+            # Only check for hotkeys if we have exactly the right number of keys pressed
+            if len(self.pressed_keys) == len(self.normal_keys):  # Check exact match for normal hotkey
+                if self._check_hotkey(self.pressed_keys, self.normal_keys):
+                    if not self.recording:
+                        self.recording = True
+                        self.ai_formatting_requested = False
+                        self.current_hotkey = 'normal'
+                        self.transcriber.start_recording()
+            elif len(self.pressed_keys) == len(self.ai_keys):  # Check exact match for AI hotkey
+                if self._check_hotkey(self.pressed_keys, self.ai_keys):
+                    if not self.recording:
+                        self.recording = True
+                        self.ai_formatting_requested = True
+                        self.current_hotkey = 'ai'
+                        self.transcriber.start_recording()
+        except AttributeError:
+            pass
+
+    def release(self, key):
+        try:
+            # Remove the released key from our set
+            if hasattr(key, 'char'):
+                self.pressed_keys.discard(key.char)
+            elif hasattr(key, 'name'):
+                self.pressed_keys.discard(key.name)
+            
+            # If we were recording and no hotkey keys are pressed, stop recording
+            if self.recording and len(self.pressed_keys) < len(self.normal_keys):
+                self.recording = False
+                self.transcriber.stop_recording()
+                # Don't reset ai_formatting_requested here - it will be reset after transcription
+        except AttributeError:
+            pass
+
+    def reset_formatting_flag(self):
+        """Reset the formatting flag after transcription is complete."""
+        self.ai_formatting_requested = False
+        self.current_hotkey = None
+
+
+def create_keylistener(transcriber: WhisperAPITranscriber) -> KeyListener:
+    # Check if we're on macOS and using the globe key
+    if (sys.platform == "darwin") and (os.getenv('UTTERTYPE_NORMAL_HOTKEY') == "<globe>"):
         return HoldGlobeKey(
             on_activate=transcriber.start_recording,
             on_deactivate=transcriber.stop_recording,
         )
-
-    key_code = key_code if key_code else "<ctrl>+<alt>+v"
-
-    return HoldHotKey(
-          HoldHotKey.parse(key_code),
-          on_activate=transcriber.start_recording,
-          on_deactivate=transcriber.stop_recording,
-      )
+    
+    # Create the KeyListener with both normal and AI hotkey support
+    return KeyListener(transcriber)

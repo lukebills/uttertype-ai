@@ -1,7 +1,6 @@
 from rich import box
 from rich.align import Align
 from rich.console import Console
-from rich.live import Live
 from rich.table import Table
 from rich.text import Text
 from datetime import datetime
@@ -13,6 +12,7 @@ class ConsoleTable:
         self.table = Table(show_footer=False)
         self.total_cost = 0
         self.total_cost_decimals = total_cost_decimals
+        self._setup_table()
 
     def _update_cost(self, cost: float):
         self.total_cost += cost
@@ -22,7 +22,6 @@ class ConsoleTable:
 
     def _setup_table(self):
         self.centered_table = Align.center(self.table)
-        self.console.clear()
         self.table.add_column("Date", no_wrap=True)
         self.table.add_column(
             "Transcription", Text.from_markup("[b]Total:", justify="right")
@@ -43,22 +42,18 @@ class ConsoleTable:
         self.table.box = box.SIMPLE_HEAD
 
     def __enter__(self):
-        self._setup_table()
-        self.live_rendering = Live(
-            self.centered_table,
-            console=self.console,
-            screen=False,
-            refresh_per_second=5,
-            vertical_overflow="visible",
-        )
-        self.live_rendering.__enter__()
+        self.console.clear()
+        self.console.print(self.centered_table)
 
     def __exit__(self, *args, **kwargs):
-        self.live_rendering.__exit__(*args, **kwargs)
+        pass
 
     def insert(self, transcription: str, cost: float):
         current_datetime = datetime.now()
         formatted_datetime = current_datetime.strftime("%dth %B, %I:%M%p")
         self.table.add_row(formatted_datetime, transcription, f"${cost}")
         self._update_cost(cost)
+        # Clear the console and reprint the table
+        self.console.clear()
+        self.console.print(self.centered_table)
         # Text("API Error", style="bold red")

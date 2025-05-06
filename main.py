@@ -5,24 +5,94 @@ from table_interface import ConsoleTable
 from key_listener import create_keylistener
 from dotenv import load_dotenv
 import os
-from utils import manual_type
+from utils import clipboard_type
+import tkinter as tk
+from tkinter import messagebox
+from openai import OpenAI
+
+def determine_context(text: str) -> str:
+    """Determine the context of the text using sentiment analysis."""
+    client = OpenAI(base_url=os.getenv('OPENAI_BASE_URL'))
+    
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4.1",
+            messages=[
+                {"role": "system", "content": "Analyze this text and determine if it's most likely a text message, email, or Teams message. Consider the tone, formality, and content. Respond with exactly one word: 'message', 'email', or 'teams'."},
+                {"role": "user", "content": text}
+            ],
+            temperature=0.3
+        )
+        return response.choices[0].message.content.strip().lower()
+    except Exception as e:
+        print(f"Error determining context: {e}")
+        return "message"  # Default to message if there's an error
+
+def format_with_context(text: str) -> str:
+    """Format text based on its determined context."""
+    # Create OpenAI client
+    client = OpenAI(base_url=os.getenv('OPENAI_BASE_URL'))
+    
+    # Create context-specific prompt
+    prompts = {
+        "message": "Format this text message with minimal changes. Only fix basic grammar and remove obvious filler words. Return only the formatted text, no explanations:",
+        "email": "Format this email with minimal changes. Fix basic grammar and punctuation. Structure the content into clear paragraphs with proper line breaks. Do not add greetings, closings, or signatures. Return only the formatted email body, no explanations:",
+        "teams": "Format this Teams message with minimal changes. Only fix basic grammar and remove obvious filler words. Return only the formatted text, no explanations:"
+    }
+    
+    try:
+        # Determine the context of the text
+        context = determine_context(text)
+        
+        # Get formatted response
+        response = client.chat.completions.create(
+            model="gpt-4.1",
+            messages=[
+                {"role": "system", "content": prompts[context]},
+                {"role": "user", "content": text}
+            ],
+            temperature=0.3
+        )
+        
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        print(f"Error formatting text: {e}")
+        return text.strip()
 
 def main():
     dotenv_path = os.path.join(os.path.dirname(__file__), '.env')
     load_dotenv(dotenv_path)
 
-    transcriber = WhisperAPITranscriber.create()
+    # Create a tkinter dialog to ask the user if they want to use VAD
+    root = tk.Tk()
+    root.withdraw()  # Hide the main window
+    use_vad = messagebox.askyesno("VAD Option", "Would you like to use Voice Activity Detection (VAD)?\n\nYes: Only record when speech is detected.\nNo: Record continuously.")
+    root.destroy()
+
+    transcriber = WhisperAPITranscriber.create(use_vad=use_vad)
     hotkey = create_keylistener(transcriber)
     console_table = ConsoleTable()
 
     async def transcription_loop():
         with console_table:
             async for transcription, audio_duration_ms in transcriber.get_transcriptions():
-                manual_type(transcription.strip())
-                console_table.insert(
-                    transcription,
-                    round(0.0006 * audio_duration_ms / 1000, 6),
-                )
+                # Add a small delay to prevent rapid processing
+                await asyncio.sleep(0.1)
+                # Only process if we have a non-empty transcription
+                if transcription.strip():
+                    # Check if AI formatting was requested via hotkey
+                    if hotkey.ai_formatting_requested:
+                        formatted_text = format_with_context(transcription)
+                    else:
+                        formatted_text = transcription.strip()
+                    
+                    clipboard_type(formatted_text)
+                    console_table.insert(
+                        formatted_text,
+                        round(0.0003 * audio_duration_ms / 1000, 6),
+                    )
+                    # Reset the formatting flag after processing
+                    hotkey.reset_formatting_flag()
 
     loop = asyncio.get_event_loop()
     loop.create_task(transcription_loop())
@@ -33,7 +103,6 @@ def main():
 
         listener.on_press = for_canonical(hotkey.press)
         listener.on_release = for_canonical(hotkey.release)
-        print("[DEBUG] Hotkey listener started. Press your hotkey...")
         loop.run_forever()
 
 if __name__ == "__main__":

@@ -9,6 +9,7 @@ from threading import Thread, Event
 import webrtcvad
 from utils import transcription_concat
 import tempfile
+import time
 
 FORMAT = pyaudio.paInt16  # Audio format
 CHANNELS = 1  # Mono audio
@@ -21,22 +22,26 @@ MIN_TRANSCRIPTION_SIZE_MS = int(
 
 
 class AudioTranscriber:
-    def __init__(self):
+    def __init__(self, use_vad=True):
         self.audio = pyaudio.PyAudio()
         self.recording_finished = Event()  # Threading event to end recording
         self.recording_finished.set()  # Initialize as finished
         self.frames = []
+        self.initial_buffer = []  # Buffer for the first 1 second of audio
         self.audio_duration = 0
         self.rolling_transcriptions: List[Tuple[int, str]] = []  # (idx, transcription)
         self.rolling_requests: List[Thread] = []  # list of pending requests
         self.event_loop = asyncio.get_event_loop()
-        self.vad = webrtcvad.Vad(1)  # Voice Activity Detector, mode can be 0 to 3
+        self.use_vad = use_vad
+        if use_vad:
+            self.vad = webrtcvad.Vad(1)  # Voice Activity Detector, mode can be 0 to 3
         self.transcriptions = asyncio.Queue()
+        self.is_processing = False  # Flag to prevent multiple transcriptions
+        self.all_frames = []  # Store all frames for the complete recording
 
     def start_recording(self):
         """Start recording audio from the microphone."""
-
-        # Start a new recording in the background, do not block
+        self.is_processing = False  # Reset processing flag when starting new recording
         def _record():
             self.recording_finished = Event()
             stream = self.audio.open(
@@ -46,64 +51,70 @@ class AudioTranscriber:
                 input=True,
                 frames_per_buffer=CHUNK,
             )
-            intermediate_trancriptions_idx = 0
-            while (
-                not self.recording_finished.is_set()
-            ):  # Keep recording until interrupted
+            self.frames = []
+            self.initial_buffer = []
+            self.all_frames = []  # Reset all frames
+            self.audio_duration = 0
+            start_time = None
+            while not self.recording_finished.is_set():  # Keep recording until interrupted
                 data = stream.read(CHUNK)
+                if start_time is None:
+                    start_time = time.time()
                 self.audio_duration += CHUNK_DURATION_MS
-                is_speech = self.vad.is_speech(data, RATE)
-                current_audio_duration = len(self.frames) * CHUNK_DURATION_MS
-                if (
-                    not is_speech
-                    and current_audio_duration >= MIN_TRANSCRIPTION_SIZE_MS
-                ):  # silence
-                    rolling_request = Thread(
-                        target=self._intermediate_transcription,
-                        args=(
-                            intermediate_trancriptions_idx,
-                            self._frames_to_wav(),
-                        ),
-                    )
-                    self.frames = []
-                    self.rolling_requests.append(rolling_request)
-                    rolling_request.start()
-                    intermediate_trancriptions_idx += 1
-                self.frames.append(data)
+                # Store all frames for the complete recording
+                self.all_frames.append(data)
+                # Also store in frames for VAD processing if enabled
+                if self.use_vad:
+                    self.frames.append(data)
+                else:
+                    self.frames = self.all_frames  # If VAD is disabled, use all frames
 
-        # start recording in a new non-blocking thread
         Thread(target=_record).start()
+
+    def _finish_transcription(self):
+        # Clear any pending transcriptions
+        while not self.transcriptions.empty():
+            try:
+                self.transcriptions.get_nowait()
+                self.transcriptions.task_done()
+            except asyncio.QueueEmpty:
+                break
+
+        # Process the complete audio recording
+        if self.all_frames:
+            # Create a buffer with all the audio frames
+            buffer = io.BytesIO()
+            buffer.name = "tmp.wav"
+            wf = wave.open(buffer, "wb")
+            wf.setnchannels(CHANNELS)
+            wf.setsampwidth(self.audio.get_sample_size(FORMAT))
+            wf.setframerate(RATE)
+            wf.writeframes(b"".join(self.all_frames))
+            wf.close()
+            
+            # Get the complete transcription
+            transcription = self.transcribe_audio(buffer)
+            
+            # Put the final transcription in the queue
+            if transcription:
+                self.event_loop.call_soon_threadsafe(
+                    self.transcriptions.put_nowait,
+                    (transcription.strip(), self.audio_duration),
+                )
 
     def stop_recording(self):
         """Stop the recording and reset variables"""
-        self.recording_finished.set()
-        self._finish_transcription()
-        self.frames = []
-        self.audio_duration = 0
-        self.rolling_requests = []
-        self.rolling_transcriptions = []
-
-    def _intermediate_transcription(self, idx, audio):
-        intermediate_transcription = self.transcribe_audio(audio)
-        self.rolling_transcriptions.append((idx, intermediate_transcription))
-
-    def _finish_transcription(self):
-        transcription = self.transcribe_audio(
-            self._frames_to_wav()
-        )  # Last transcription
-        for request in self.rolling_requests:  # Wait for rolling requests
-            request.join()
-        self.rolling_transcriptions.append(
-            (len(self.rolling_transcriptions), transcription)
-        )
-        sorted(self.rolling_transcriptions, key=lambda x: x[0])  # Sort by idx
-        transcriptions = [
-            t[1] for t in self.rolling_transcriptions
-        ]  # Get ordered transcriptions
-        self.event_loop.call_soon_threadsafe(  # Put final combined result in finished queue
-            self.transcriptions.put_nowait,
-            (transcription_concat(transcriptions), self.audio_duration),
-        )
+        if not self.is_processing:  # Only process if not already processing
+            self.is_processing = True
+            self.recording_finished.set()
+            self._finish_transcription()
+            self.frames = []
+            self.initial_buffer = []
+            self.all_frames = []
+            self.audio_duration = 0
+            self.rolling_requests = []
+            self.rolling_transcriptions = []
+            self.is_processing = False
 
     def _frames_to_wav(self):
         buffer = io.BytesIO()
@@ -112,7 +123,8 @@ class AudioTranscriber:
         wf.setnchannels(CHANNELS)
         wf.setsampwidth(self.audio.get_sample_size(FORMAT))
         wf.setframerate(RATE)
-        wf.writeframes(b"".join(self.frames))
+        # Combine initial_buffer and frames for the final audio
+        wf.writeframes(b"".join(self.initial_buffer + self.frames))
         wf.close()
         return buffer
 
@@ -139,8 +151,8 @@ class WhisperAPITranscriber(AudioTranscriber):
 
     @staticmethod
     def create(*args, **kwargs):
-        base_url = os.getenv('OPENAI_BASE_URL', 'https://api.openai.com/v1')
-        model_name = os.getenv('OPENAI_MODEL_NAME', 'whisper-1')
+        base_url = os.getenv('OPENAI_BASE_URL')
+        model_name = os.getenv('OPENAI_MODEL_NAME')
 
         return WhisperAPITranscriber(base_url, model_name)
 
@@ -159,11 +171,11 @@ class WhisperAPITranscriber(AudioTranscriber):
                 return transcription.replace(prompt, "").strip()
             return transcription
         except Exception as e:
-            print(f"Encountered Error: {e}")
+            #print(f"Encountered Error: {e}")
             return ""
 
 
-class WhisperLocalMLXTranscriber(AudioTranscriber):
+"""class WhisperLocalMLXTranscriber(AudioTranscriber):
     def __init__(self, model_type="distil-medium.en", *args, **kwargs):
         super().__init__(*args, **kwargs)
         from lightning_whisper_mlx import LightningWhisperMLX
@@ -178,5 +190,6 @@ class WhisperLocalMLXTranscriber(AudioTranscriber):
                 os.unlink(tmpfile.name)
             return transcription
         except Exception as e:
-            print(f"Encountered Error: {e}")
-            return ""
+            #print(f"Encountered Error: {e}")
+            return "" 
+"""

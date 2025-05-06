@@ -3,6 +3,9 @@
 .AppleDouble
 .LSOverride
 
+# Ignore batch file
+start_uttertype.bat
+
 # Ignore audio.wav
 audio.wav
 

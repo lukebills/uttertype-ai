@@ -35,9 +35,23 @@ def format_with_context(text: str) -> str:
     
     # Create context-specific prompt
     prompts = {
-        "message": "Format this text message with minimal changes. Only fix basic grammar and remove obvious filler words. Return only the formatted text, no explanations:",
-        "email": "Format this email with minimal changes. Fix basic grammar and punctuation. Structure the content into clear paragraphs with proper line breaks. Do not add greetings, closings, or signatures. Return only the formatted email body, no explanations:",
-        "teams": "Format this Teams message with minimal changes. Only fix basic grammar and remove obvious filler words. Return only the formatted text, no explanations:"
+        "message": (
+            "Format this text message with minimal changes. "
+            "Only fix basic grammar and remove obvious filler words. "
+            "If the message includes initial context before the actual message, ignore it and only format the main message content. "
+            "Return only the formatted text, no explanations:"
+        ),
+        "email": (
+            "Format this email with minimal changes. Fix basic grammar and punctuation. "
+            "Structure the content into clear paragraphs with proper line breaks. "
+            "Ignore any spoken context at the beginning and format only the actual email body. "
+            "Do not add greetings, closings, or signatures. Return only the formatted email body, no explanations:"
+        ),
+        "teams": (
+            "Format this Teams message with minimal changes. Only fix basic grammar and remove obvious filler words. "
+            "Ignore any contextual preamble if present and format only the message itself. "
+            "Return only the formatted text, no explanations:"
+        )
     }
     
     try:

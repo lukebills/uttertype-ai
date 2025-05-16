@@ -21,7 +21,7 @@ def determine_context(text: str) -> str:
                 {"role": "system", "content": "Analyze this text and determine if it's most likely a text message, email, or Teams message. Consider the tone, formality, and content. Respond with exactly one word: 'message', 'email', or 'teams'."},
                 {"role": "user", "content": text}
             ],
-            temperature=0.5
+            temperature=0.3
         )
         return response.choices[0].message.content.strip().lower()
     except Exception as e:
@@ -38,47 +38,26 @@ def format_with_context(text: str) -> str:
         "default": (
             "You will receive a transcribed message where the first part may describe the context "
             "(e.g. 'this is an email to a supplier', 'this is a Teams message to my colleague', or 'this is a technical explanation'). "
-            "Use the context to determine the appropriate formatting style:\n"
-            "- For emails: Include appropriate greetings (e.g., 'Hi John,' or 'Dear Team,'), structure with clear paragraphs using line breaks, "
-            "and maintain a professional tone. Fix grammar and punctuation.\n"
-            "- For Teams messages: Include appropriate greetings (e.g., 'Hi John,' or 'Hey team,'), format as a single flowing message "
-            "without unnecessary line breaks, and maintain a conversational tone. Fix grammar and remove filler words.\n"
-            "- For other messages: Format with minimal changes, fixing basic grammar and removing obvious filler words.\n"
-            "Ignore any spoken context at the beginning and format only the actual message content. "
+            "Use the context to determine the appropriate formatting style. "
+            "Format the actual message content that follows the context. "
+            "Apply minimal edits: fix basic grammar, punctuation, and remove filler words. "
+            "Structure emails with clear paragraphs, Teams messages with clear sentences, and technical content for clarity. "
             "Return only the formatted message without any explanation or added text:"
-        ),
-        # Commented out specific prompts for future reference
-        # "message": (
-        #     "Format this text message with minimal changes. "
-        #     "Only fix basic grammar and remove obvious filler words. "
-        #     "If the message includes initial context before the actual message, ignore it and only format the main message content. "
-        #     "Return only the formatted text, no explanations:"
-        # ),
-        # "email": (
-        #     "Format this email with minimal changes. Fix basic grammar and punctuation. "
-        #     "Structure the content into clear paragraphs with proper line breaks. "
-        #     "Ignore any spoken context at the beginning and format only the actual email body. "
-        #     "Do not add greetings, closings, or signatures. Return only the formatted email body, no explanations:"
-        # ),
-        # "teams": (
-        #     "Format this Teams message with minimal changes. Only fix basic grammar and remove obvious filler words. "
-        #     "Ignore any contextual preamble if present and format only the message itself. "
-        #     "Return only the formatted text, no explanations:"
-        # )
+        )
     }
     
     try:
         # Determine the context of the text
-        # context = determine_context(text)
+        context = determine_context(text)
         
-        # Always use the default prompt regardless of context
+        # Get formatted response
         response = client.chat.completions.create(
             model="gpt-4.1",
             messages=[
-                {"role": "system", "content": prompts["default"]},
+                {"role": "system", "content": prompts[context]},
                 {"role": "user", "content": text}
             ],
-            temperature=0.5
+            temperature=0.3
         )
         
         return response.choices[0].message.content.strip()

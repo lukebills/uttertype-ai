@@ -10,75 +10,52 @@ import tkinter as tk
 from tkinter import messagebox
 from openai import OpenAI
 
-def determine_context(text: str) -> str:
-    """Determine the context of the text using sentiment analysis."""
-    client = OpenAI(base_url=os.getenv('OPENAI_BASE_URL'))
-    
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4.1",
-            messages=[
-                {"role": "system", "content": "Analyze this text and determine if it's most likely a text message, email, or Teams message. Consider the tone, formality, and content. Respond with exactly one word: 'message', 'email', or 'teams'."},
-                {"role": "user", "content": text}
-            ],
-            temperature=0.5
-        )
-        return response.choices[0].message.content.strip().lower()
-    except Exception as e:
-        print(f"Error determining context: {e}")
-        return "message"  # Default to message if there's an error
-
 def format_with_context(text: str) -> str:
     """Format text based on its determined context."""
     # Create OpenAI client
     client = OpenAI(base_url=os.getenv('OPENAI_BASE_URL'))
     
-    # Create context-specific prompt
-    prompts = {
-        "default": (
-            "You will receive a transcribed message where the first part may describe the context "
-            "(e.g. 'this is an email to a supplier', 'this is a Teams message to my colleague', or 'this is a technical explanation'). "
-            "Use the context to determine the appropriate formatting style:\n"
-            "- For emails: Include appropriate greetings (e.g., 'Hi John,' or 'Dear Team,'), structure with clear paragraphs using line breaks, "
-            "and maintain a professional tone. Fix grammar and punctuation.\n"
-            "- For Teams messages: Include appropriate greetings (e.g., 'Hi John,' or 'Hey team,'), format as a single flowing message "
-            "without unnecessary line breaks, and maintain a conversational tone. Fix grammar and remove filler words.\n"
-            "- For other messages: Format with minimal changes, fixing basic grammar and removing obvious filler words.\n"
-            "Ignore any spoken context at the beginning and format only the actual message content. "
-            "Return only the formatted message without any explanation or added text:"
-        ),
-        # Commented out specific prompts for future reference
-        # "message": (
-        #     "Format this text message with minimal changes. "
-        #     "Only fix basic grammar and remove obvious filler words. "
-        #     "If the message includes initial context before the actual message, ignore it and only format the main message content. "
-        #     "Return only the formatted text, no explanations:"
-        # ),
-        # "email": (
-        #     "Format this email with minimal changes. Fix basic grammar and punctuation. "
-        #     "Structure the content into clear paragraphs with proper line breaks. "
-        #     "Ignore any spoken context at the beginning and format only the actual email body. "
-        #     "Do not add greetings, closings, or signatures. Return only the formatted email body, no explanations:"
-        # ),
-        # "teams": (
-        #     "Format this Teams message with minimal changes. Only fix basic grammar and remove obvious filler words. "
-        #     "Ignore any contextual preamble if present and format only the message itself. "
-        #     "Return only the formatted text, no explanations:"
-        # )
-    }
+    # Default prompt for all message types
+    default_prompt = (
+        "You will receive a transcribed message. The opening lines may:\n"
+        "  (a) describe context (e.g. 'this is an email to a supplier'), and/or\n"
+        "  (b) include explicit formatting instructions.\n"
+        "Follow any explicit formatting instructions first. If none are given, infer the correct style from the context.\n\n"
+        "Formatting rules:\n"
+        "- Emails:\n"
+        "  • ALWAYS start with an appropriate greeting (e.g., 'Hi [Name],' or 'Dear [Name],').\n"
+        "  • Use clear paragraphs separated by literal double newlines (\\n\\n).\n"
+        "  • Each paragraph should be a complete thought or topic.\n"
+        "  • Maintain a professional tone; correct grammar, punctuation, and spelling.\n"
+        "  • If the input mentions 'email' or 'email to', format as an email with greeting and paragraphs.\n"
+        "- Teams/Chat messages:\n"
+        "  • Start with a brief greeting if appropriate (e.g., 'Hi [Name],').\n"
+        "  • Use a single flowing block of text with minimal line breaks.\n"
+        "  • Be conversational but concise; remove filler words and correct grammar.\n"
+        "- Other message types:\n"
+        "  • Apply only minimal edits: fix obvious errors, remove filler words.\n\n"
+        "Additional requirements:\n"
+        "- Use Australian English spelling unless the user specifies another variant.\n"
+        "- Do NOT include explanations, commentary, or markdown formatting unless explicitly requested.\n"
+        "- Ignore any spoken/meta context unless explicitly stated as instructions.\n"
+        "- Output only the final formatted message. Do not add notes or headers.\n"
+        "- Ensure newline characters are preserved exactly as written (e.g. '\\n' for new line). If paragraphs are needed, separate with '\\n\\n'.\n"
+        "- If the input is already well-formatted, leave structure intact and only correct errors.\n"
+        "- IMPORTANT: When formatting emails, ensure the greeting is on its own line followed by a blank line, then the content in proper paragraphs.\n\n"
+        "[START_OUTPUT]\n"
+        "(Return only the formatted message here.)\n"
+        "[END_OUTPUT]"
+    )
+
     
     try:
-        # Determine the context of the text
-        # context = determine_context(text)
-        
-        # Always use the default prompt regardless of context
         response = client.chat.completions.create(
-            model="gpt-4.1",
+            model="gpt-4o-mini-2024-07-18",
             messages=[
-                {"role": "system", "content": prompts["default"]},
+                {"role": "system", "content": default_prompt},
                 {"role": "user", "content": text}
             ],
-            temperature=0.5
+            temperature=0.7
         )
         
         return response.choices[0].message.content.strip()
@@ -110,12 +87,14 @@ def main():
                     # Check if AI formatting was requested via hotkey
                     if hotkey.ai_formatting_requested:
                         formatted_text = format_with_context(transcription)
+                        display_text = f"[AI] {formatted_text}"
                     else:
                         formatted_text = transcription.strip()
+                        display_text = formatted_text
                     
                     clipboard_type(formatted_text)
                     console_table.insert(
-                        formatted_text,
+                        display_text,
                         round(0.0003 * audio_duration_ms / 1000, 6),
                     )
                     # Reset the formatting flag after processing

@@ -57,16 +57,16 @@ class KeyListener:
         self.pressed_keys = set()
         self.current_hotkey = None  # Track which hotkey is active
         
-        # Get hotkey combinations from .env
-        normal_hotkey = os.getenv('UTTERTYPE_NORMAL_HOTKEY', '<ctrl>+<alt>+v')
-        ai_hotkey = os.getenv('UTTERTYPE_AI_HOTKEY', '<ctrl>+<alt>+b')
+        # Hardcoded hotkey combinations
+        normal_hotkey = '<ctrl>+<alt>+q'
+        ai_hotkey = '<ctrl>+<alt>+a'
         
         # Parse hotkey combinations
         self.normal_keys = self._parse_hotkey(normal_hotkey)
         self.ai_keys = self._parse_hotkey(ai_hotkey)
 
     def _parse_hotkey(self, hotkey_str: str) -> set:
-        """Parse hotkey string from .env into a set of key names."""
+        """Parse hotkey string into a set of key names."""
         keys = set()
         for key in hotkey_str.split('+'):
             key = key.strip().lower()
@@ -82,6 +82,10 @@ class KeyListener:
                 keys.add('v')
             elif key == 'b':
                 keys.add('b')
+            elif key == 'q':
+                keys.add('q')
+            elif key == 'a':
+                keys.add('a')
             # Add more key mappings as needed
         return keys
 
@@ -95,17 +99,31 @@ class KeyListener:
             if hasattr(key, 'char'):
                 self.pressed_keys.add(key.char)
             elif hasattr(key, 'name'):
-                self.pressed_keys.add(key.name)
+                # Handle modifier keys correctly
+                if key.name == 'ctrl_l' or key.name == 'ctrl_r':
+                    self.pressed_keys.add('ctrl')
+                elif key.name == 'alt_l' or key.name == 'alt_r':
+                    self.pressed_keys.add('alt')
+                elif key.name == 'shift_l' or key.name == 'shift_r':
+                    self.pressed_keys.add('shift')
+                else:
+                    self.pressed_keys.add(key.name)
+            
+            #print(f"Pressed keys: {self.pressed_keys}")  # Debug logging
             
             # Only check for hotkeys if we're not already recording
-            if not self.recording:
+            # and if we have the exact number of keys pressed that we expect
+            if not self.recording and len(self.pressed_keys) == len(self.normal_keys):
+                #print(f"Checking hotkeys. Current keys: {self.pressed_keys}, Normal keys: {self.normal_keys}, AI keys: {self.ai_keys}")  # Debug logging
                 # Check for exact matches with either hotkey combination
                 if self._check_hotkey(self.pressed_keys, self.normal_keys):
+                    #print("Normal hotkey detected!")  # Debug logging
                     self.recording = True
                     self.ai_formatting_requested = False
                     self.current_hotkey = 'normal'
                     self.transcriber.start_recording()
                 elif self._check_hotkey(self.pressed_keys, self.ai_keys):
+                    #print("AI hotkey detected!")  # Debug logging
                     self.recording = True
                     self.ai_formatting_requested = True
                     self.current_hotkey = 'ai'
@@ -119,7 +137,15 @@ class KeyListener:
             if hasattr(key, 'char'):
                 self.pressed_keys.discard(key.char)
             elif hasattr(key, 'name'):
-                self.pressed_keys.discard(key.name)
+                # Handle modifier keys correctly
+                if key.name == 'ctrl_l' or key.name == 'ctrl_r':
+                    self.pressed_keys.discard('ctrl')
+                elif key.name == 'alt_l' or key.name == 'alt_r':
+                    self.pressed_keys.discard('alt')
+                elif key.name == 'shift_l' or key.name == 'shift_r':
+                    self.pressed_keys.discard('shift')
+                else:
+                    self.pressed_keys.discard(key.name)
             
             # If we were recording, stop recording
             if self.recording:

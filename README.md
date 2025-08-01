@@ -1,128 +1,165 @@
-# uttertype ([demo](https://www.youtube.com/watch?v=eSDYIFzU_fY))
+# UtterType AI
 
-<img src="./assets/sample_terminal.png" alt="alt text" style="width: 500px;"/>
+A real-time voice transcription tool with AI-powered text formatting and email grammar correction.
 
-## Setup
+## Features
 
-### 1. [Install PortAudio/PyAudio](https://people.csail.mit.edu/hubert/pyaudio/)
-#### macOS
-Installing portaudio on macOS can be somewhat tricky, especially on M1+ chips. In general, using conda seems to be the safest way to install portaudio
+### Core Functionality
+- **Real-time voice transcription** using OpenAI's Whisper API
+- **Voice Activity Detection (VAD)** - Optional feature to only record when speech is detected
+- **AI-powered text formatting** based on context (emails, chat messages, etc.)
+- **Professional email formatting** with grammar and spelling correction
+- **Australian English** spelling and conventions
+
+### Keyboard Shortcuts
+- **Primary transcription hotkey** - Configurable via key_listener module
+- **AI formatting toggle** - Enable/disable AI formatting for transcriptions
+- **Ctrl+Alt+Shift+E** - Email formatting shortcut for selected text
+
+## Requirements
+
+- Python 3.8+
+- OpenAI API access
+- Required Python packages (see installation)
+
+## Installation
+
+1. Clone the repository:
+```bash
+git clone <repository-url>
+cd uttertype-ai
 ```
-conda install portaudio
+
+2. Install required packages:
+```bash
+pip install -r requirements.txt
 ```
-#### Windows
-```
-python -m pip install pyaudio
-```
-#### Linux
-```
-sudo apt-get install python3-pyaudio
-```
-### 2. Add a HotKey
-For macOS, the hotkey is automatically set to the globe key by default (&#127760; bottom left key). For Windows and Linux, you can configure the hotkey by setting the `UTTERTYPE_RECORD_HOTKEYS` environment variable in `.env`:
+
+3. Create a `.env` file in the project root with your configuration:
 ```env
-UTTERTYPE_RECORD_HOTKEYS="<ctrl>+<alt>+v"
+OPENAI_API_KEY=your_openai_api_key_here
+OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_CHAT_MODEL=gpt-4o-mini-2024-07-18
 ```
-
-For more context, view the [pynput documentation for using HotKeys](https://pynput.readthedocs.io/en/latest/keyboard.html#global-hotkeys) (HoldHotKey is extended from this class).
-
-### 3. Install Dependencies
-Choose one of the following methods to install the required dependencies:
-
-#### Option A: Using pip
-```shell
-python -m pip install -r requirements.txt
-```
-
-#### Option B: Using pipenv
-First, install pipenv if you haven't already:
-```shell
-pip install pipenv
-```
-
-Then, install dependencies using pipenv:
-```shell
-pipenv install
-```
-
-This will create a virtual environment and install all dependencies from the Pipfile. To activate the environment:
-```shell
-pipenv shell
-```
-
-
-If during/after installation on Linux you see error similar to:
-```
-ImportError: /home/soul/anaconda3/lib/libstdc++.so.6: version `GLIBCXX_3.4.32' not found (required by /lib/x86_64-linux-gnu/libjack.so.0)
-```
-Check out [StackOverflow](https://stackoverflow.com/questions/72540359/glibcxx-3-4-30-not-found-for-librosa-in-conda-virtual-environment-after-tryin) and [Berkley](https://bcourses.berkeley.edu/courses/1478831/pages/glibcxx-missing)
-
-
-### 4. Configure OpenAI Settings
-
-You can configure uttertype to work with either OpenAI's official API or a local Whisper server. There are two ways to set this up:
-
-#### Option A: Using a .env file (Recommended)
-Create a `.env` file in the project directory with these settings:
-
-```env
-# 1. Required: Your API key
-OPENAI_API_KEY="sk-your-key-here"
-
-# 2. Optional: Choose your API endpoint
-# For OpenAI's official API (default):
-OPENAI_BASE_URL="https://api.openai.com/v1"
-# OR for a local [Faster Whisper server](https://github.com/fedirz/faster-whisper-server):
-OPENAI_BASE_URL="http://localhost:7000/v1"
-
-# 3. Optional: Select your preferred model
-# For OpenAI's official API:
-OPENAI_MODEL_NAME="whisper-1"
-# OR for local Whisper server, some options include:
-OPENAI_MODEL_NAME="Systran/faster-whisper-small"
-OPENAI_MODEL_NAME="Systran/faster-distil-whisper-large-v3"
-OPENAI_MODEL_NAME="deepdml/faster-whisper-large-v3-turbo-ct2"
-```
-
-#### Option B: Using Environment Variables
-You can also set these values directly in your terminal:
-
-For Linux/macOS:
-```shell
-export OPENAI_API_KEY="sk-your-key-here"
-export OPENAI_BASE_URL="https://api.openai.com/v1" # optional
-export OPENAI_MODEL_NAME="whisper-1" # optional
-```
-
-For Windows:
-```shell
-$env:OPENAI_API_KEY = "sk-your-key-here"
-$env:OPENAI_BASE_URL = "https://api.openai.com/v1"  # optional
-$env:OPENAI_MODEL_NAME = "whisper-1"  # optional
-```
-
-See [`.sample_env`](.sample_env) in the repository for example configurations.
-
-#### Using a Local Whisper Server
-For faster and cheaper transcription, you can set up a local [faster-whisper-server](https://github.com/fedirz/faster-whisper-server). When using a local server:
-
-1. Set `OPENAI_BASE_URL` to your server's address (e.g., `http://localhost:7000/v1`)
-2. Choose from supported local models like:
-   - `Systran/faster-whisper-small` (fastest)
-   - `Systran/faster-distil-whisper-large-v3` (most accurate)
-   - `deepdml/faster-whisper-large-v3-turbo-ct2` (almost as good, but faster)
-
-### 5. Final run and permissions
-Finally, run main.py
-```shell
-python main.py
-```
-OR
-```shell
-./start_uttertype.sh # installed and configured pipenv environment would be needed
-```
-
-When the program first runs, you will likely need to give it sufficient permissions. On macOS, this will include adding terminal to accessibility under `Privacy and Security > Accessibility`, giving it permission to monitor the keyboard, and finally giving it permission to record using the microphone.
 
 ## Usage
-To start transcription, press and hold the registered hotkey to start recording. To stop the recording, lift your registered hotkey. On macOS, the registered hotkey is the globe icon by default. For other operating systems, this will have to by manually configured in `main.py` as described earlier.
+
+### Starting the Application
+```bash
+python main.py
+```
+
+Upon startup, you'll be prompted to choose whether to use Voice Activity Detection (VAD):
+- **Yes**: Only records when speech is detected (recommended for most users)
+- **No**: Records continuously (useful in noisy environments)
+
+### Voice Transcription
+1. Use the configured hotkey to start/stop voice recording
+2. Speak clearly into your microphone
+3. The transcribed text will be automatically pasted at your cursor location
+4. Toggle AI formatting on/off using the formatting hotkey
+
+### Email Formatting Feature
+The email formatting feature allows you to improve any selected text for professional email communication:
+
+1. **Select text** you want to format in any application (Word, Outlook, browser, etc.)
+2. **Press Ctrl+Alt+Shift+E**
+3. The selected text will be automatically:
+   - Grammar and spelling corrected
+   - Formatted for professional email communication
+   - Converted to Australian English spelling
+   - Replaced in-place with the improved version
+
+#### Email Formatting Examples
+
+**Before:**
+```
+hi john thanks for you're email about the meeting tommorow i think we should discus the budget and also talk about the new project timeline let me know if you need anything else
+```
+
+**After:**
+```
+Hi John,
+
+Thank you for your email about the meeting tomorrow. I think we should discuss the budget and also talk about the new project timeline.
+
+Please let me know if you need anything else.
+```
+
+### AI Text Formatting
+The AI formatting feature automatically detects context and applies appropriate formatting:
+- **Emails**: Adds proper greetings, paragraphs, and professional structure
+- **Chat messages**: Maintains casual tone with minimal editing
+- **Other text**: Applies basic formatting and grammar correction
+
+## Configuration
+
+### Environment Variables
+- `OPENAI_API_KEY` - Your OpenAI API key
+- `OPENAI_BASE_URL` - OpenAI API base URL (default: https://api.openai.com/v1)
+- `OPENAI_CHAT_MODEL` - Model to use for text formatting (default: gpt-4o-mini-2024-07-18)
+
+### Customisation
+- Hotkeys can be configured in the `key_listener.py` module
+- AI prompts can be modified in the `format_with_context()` and `format_for_email()` functions
+- Temperature settings can be adjusted for different formatting behaviours
+
+## File Structure
+
+```
+uttertype-ai/
+├── main.py                 # Main application entry point
+├── transcriber.py          # Whisper API transcription handling
+├── key_listener.py         # Keyboard shortcut management
+├── table_interface.py      # Console output formatting
+├── utils.py               # Utility functions
+├── .env                   # Environment configuration
+├── requirements.txt       # Python dependencies
+└── README.md             # This file
+```
+
+## Troubleshooting
+
+### Common Issues
+
+1. **No transcription appearing**
+   - Check your microphone permissions
+   - Verify OpenAI API key is correct
+   - Ensure you're using the correct hotkey
+
+2. **Email formatting not working**
+   - Make sure text is selected before pressing Ctrl+Alt+Shift+E
+   - Check that the application has permission to access clipboard
+   - Verify OpenAI API is accessible
+
+3. **Poor transcription quality**
+   - Ensure you're speaking clearly and at normal volume
+   - Check microphone quality and positioning
+   - Try adjusting VAD settings
+
+### Performance Tips
+- Use VAD mode for better battery life on laptops
+- Lower temperature settings (0.1-0.3) for more consistent formatting
+- Higher temperature settings (0.5-0.8) for more creative text generation
+
+## Dependencies
+
+- `asyncio` - Asynchronous programming
+- `pynput` - Keyboard and mouse input handling
+- `openai` - OpenAI API client
+- `pyautogui` - GUI automation
+- `pyperclip` - Clipboard operations
+- `tkinter` - GUI dialogs
+- `python-dotenv` - Environment variable management
+
+## License
+
+[Add your license information here]
+
+## Contributing
+
+[Add contribution guidelines here]
+
+## Support
+
+For issues and feature requests, please [create an issue](link-to-issues) in the repository.

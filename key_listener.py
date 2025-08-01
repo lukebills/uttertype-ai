@@ -49,19 +49,18 @@ class HoldGlobeKey:
         self.press(key)
 
 
+# key_listener.py - Use environment variables for hotkeys
 class KeyListener:
     def __init__(self, transcriber: WhisperAPITranscriber):
         self.transcriber = transcriber
         self.recording = False
         self.ai_formatting_requested = False
         self.pressed_keys = set()
-        self.current_hotkey = None  # Track which hotkey is active
         
-        # Hardcoded hotkey combinations
-        normal_hotkey = '<ctrl>+<alt>+q'
-        ai_hotkey = '<ctrl>+<alt>+a'
+        # Get hotkeys from environment variables
+        normal_hotkey = os.getenv('UTTERTYPE_RECORD_HOTKEYS', '<ctrl>+<alt>+q')
+        ai_hotkey = os.getenv('UTTERTYPE_AI_HOTKEYS', '<ctrl>+<alt>+a')
         
-        # Parse hotkey combinations
         self.normal_keys = self._parse_hotkey(normal_hotkey)
         self.ai_keys = self._parse_hotkey(ai_hotkey)
 

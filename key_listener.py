@@ -1,5 +1,7 @@
 import os
 import sys
+import time
+import threading
 from pynput.keyboard import HotKey
 from pynput import keyboard
 from transcriber import WhisperAPITranscriber
@@ -8,6 +10,7 @@ from transcriber import WhisperAPITranscriber
 class HoldHotKey(HotKey):
     def __init__(self, keys, on_activate, on_deactivate):
         self.active = False
+        self._keys_pressed = set()
 
         def _mod_on_activate():
             self.active = True
@@ -20,9 +23,15 @@ class HoldHotKey(HotKey):
         super().__init__(keys, _mod_on_activate)
         self._on_deactivate = _mod_on_deactivate
 
+    def press(self, key):
+        self._keys_pressed.add(key)
+        super().press(key)
+
     def release(self, key):
+        self._keys_pressed.discard(key)
         super().release(key)
-        if self.active and self._state != self._keys:
+        # If we were active and no more keys are pressed, deactivate
+        if self.active and not self._keys_pressed:
             self._on_deactivate()
 
 
@@ -49,8 +58,149 @@ class HoldGlobeKey:
         self.press(key)
 
 
-# key_listener.py - Use environment variables for hotkeys
+# key_listener.py - Consolidated hotkey management
 class KeyListener:
+    def __init__(self, transcriber: WhisperAPITranscriber, email_handler_callback=None):
+        self.transcriber = transcriber
+        self.recording = False
+        self.ai_formatting_requested = False
+        self.email_handler_callback = email_handler_callback
+        
+        # Get hotkeys from environment variables
+        normal_hotkey = os.getenv('UTTERTYPE_RECORD_HOTKEYS', '<ctrl>+<alt>+q')
+        ai_hotkey = os.getenv('UTTERTYPE_AI_HOTKEYS', '<ctrl>+<alt>+a')
+        email_hotkey = os.getenv('UTTERTYPE_EMAIL_HOTKEY', '<ctrl>+<alt>+<shift>+e')
+        
+        # Email hotkey debouncing
+        self.last_email_trigger = 0
+        
+        # Create global hotkeys for all functionality
+        self.hotkeys = {}
+        
+        # Voice transcription hotkeys using hold-to-record
+        self.hotkeys['normal'] = keyboard.GlobalHotKeys({
+            normal_hotkey: self._start_normal_recording
+        })
+        
+        self.hotkeys['ai'] = keyboard.GlobalHotKeys({
+            ai_hotkey: self._start_ai_recording
+        })
+        
+        # Email formatting hotkey
+        if email_handler_callback:
+            self.hotkeys['email'] = keyboard.GlobalHotKeys({
+                email_hotkey: self._handle_email_hotkey
+            })
+        
+        # Track which keys are currently held down for voice recording
+        self.normal_hotkey_held = False
+        self.ai_hotkey_held = False
+        
+        # Create additional listeners for key release detection
+        self.key_release_listener = None
+    
+    def _start_normal_recording(self):
+        """Start recording with normal formatting."""
+        if not self.recording and not self.normal_hotkey_held:
+            print("Normal recording started...")
+            self.recording = True
+            self.ai_formatting_requested = False
+            self.normal_hotkey_held = True
+            self.transcriber.start_recording()
+            self._start_release_listener()
+    
+    def _start_ai_recording(self):
+        """Start recording with AI formatting."""
+        if not self.recording and not self.ai_hotkey_held:
+            print("AI recording started...")
+            self.recording = True
+            self.ai_formatting_requested = True
+            self.ai_hotkey_held = True
+            self.transcriber.start_recording()
+            self._start_release_listener()
+    
+    def _start_release_listener(self):
+        """Start a listener to detect when hotkeys are released."""
+        if self.key_release_listener is None:
+            self.key_release_listener = keyboard.Listener(
+                on_release=self._on_key_release
+            )
+            self.key_release_listener.start()
+    
+    def _on_key_release(self, key):
+        """Handle key release events to stop recording."""
+        try:
+            # Check if any of the hotkey components were released
+            key_name = None
+            if hasattr(key, 'char'):
+                key_name = key.char
+            elif hasattr(key, 'name'):
+                key_name = key.name
+            
+            # If any modifier or hotkey letter is released, stop recording
+            if key_name in ['ctrl_l', 'ctrl_r', 'alt_l', 'alt_r', 'q', 'a'] and self.recording:
+                self._stop_recording()
+        except AttributeError:
+            pass
+    
+    def _stop_recording(self):
+        """Stop recording."""
+        if self.recording:
+            print("Recording stopped...")
+            self.recording = False
+            self.normal_hotkey_held = False
+            self.ai_hotkey_held = False
+            self.transcriber.stop_recording()
+            
+            # Stop the release listener
+            if self.key_release_listener:
+                self.key_release_listener.stop()
+                self.key_release_listener = None
+    
+    def _handle_email_hotkey(self):
+        """Handle email formatting hotkey with debouncing."""
+        current_time = time.time()
+        
+        # Debounce: ignore if triggered within 2 seconds
+        if current_time - self.last_email_trigger < 2.0:
+            print("Email hotkey debounced - ignoring rapid trigger")
+            return
+            
+        self.last_email_trigger = current_time
+        print("Email hotkey triggered!")
+        
+        if self.email_handler_callback:
+            # Run in separate thread to avoid blocking
+            threading.Thread(target=self.email_handler_callback, daemon=True).start()
+    
+    def start_listeners(self):
+        """Start all hotkey listeners."""
+        for name, hotkey in self.hotkeys.items():
+            hotkey.start()
+            print(f"Started {name} hotkey listener")
+    
+    def stop_listeners(self):
+        """Stop all hotkey listeners."""
+        for name, hotkey in self.hotkeys.items():
+            hotkey.stop()
+            print(f"Stopped {name} hotkey listener")
+        
+        # Stop release listener if active
+        if self.key_release_listener:
+            self.key_release_listener.stop()
+            self.key_release_listener = None
+    
+    def stop_recording(self):
+        """Stop recording (called externally when key is released)."""
+        self._stop_recording()
+
+    def reset_formatting_flag(self):
+        """Reset the formatting flag after transcription is complete."""
+        self.ai_formatting_requested = False
+
+
+class ManualKeyListener:
+    """Legacy key listener for systems that need manual key tracking."""
     def __init__(self, transcriber: WhisperAPITranscriber):
         self.transcriber = transcriber
         self.recording = False
@@ -85,6 +235,8 @@ class KeyListener:
                 keys.add('q')
             elif key == 'a':
                 keys.add('a')
+            elif key == 'e':
+                keys.add('e')
             # Add more key mappings as needed
         return keys
 
@@ -108,24 +260,18 @@ class KeyListener:
                 else:
                     self.pressed_keys.add(key.name)
             
-            #print(f"Pressed keys: {self.pressed_keys}")  # Debug logging
-            
             # Only check for hotkeys if we're not already recording
-            # and if we have the exact number of keys pressed that we expect
-            if not self.recording and len(self.pressed_keys) == len(self.normal_keys):
-                #print(f"Checking hotkeys. Current keys: {self.pressed_keys}, Normal keys: {self.normal_keys}, AI keys: {self.ai_keys}")  # Debug logging
+            if not self.recording:
                 # Check for exact matches with either hotkey combination
                 if self._check_hotkey(self.pressed_keys, self.normal_keys):
-                    #print("Normal hotkey detected!")  # Debug logging
+                    print("Normal hotkey detected!")
                     self.recording = True
                     self.ai_formatting_requested = False
-                    self.current_hotkey = 'normal'
                     self.transcriber.start_recording()
                 elif self._check_hotkey(self.pressed_keys, self.ai_keys):
-                    #print("AI hotkey detected!")  # Debug logging
+                    print("AI hotkey detected!")
                     self.recording = True
                     self.ai_formatting_requested = True
-                    self.current_hotkey = 'ai'
                     self.transcriber.start_recording()
         except AttributeError:
             pass
@@ -152,17 +298,15 @@ class KeyListener:
                 self.transcriber.stop_recording()
                 # Clear all pressed keys to prevent any delayed triggers
                 self.pressed_keys.clear()
-                self.current_hotkey = None
         except AttributeError:
             pass
 
     def reset_formatting_flag(self):
         """Reset the formatting flag after transcription is complete."""
         self.ai_formatting_requested = False
-        self.current_hotkey = None
 
 
-def create_keylistener(transcriber: WhisperAPITranscriber) -> KeyListener:
+def create_keylistener(transcriber: WhisperAPITranscriber, email_handler_callback=None):
     # Check if we're on macOS and using the globe key
     if (sys.platform == "darwin") and (os.getenv('UTTERTYPE_NORMAL_HOTKEY') == "<globe>"):
         return HoldGlobeKey(
@@ -170,5 +314,6 @@ def create_keylistener(transcriber: WhisperAPITranscriber) -> KeyListener:
             on_deactivate=transcriber.stop_recording,
         )
     
-    # Create the KeyListener with both normal and AI hotkey support
-    return KeyListener(transcriber)
+    # Always use the new KeyListener with GlobalHotKeys for better reliability
+    # The ManualKeyListener is kept as a fallback but not used by default
+    return KeyListener(transcriber, email_handler_callback)

@@ -79,15 +79,23 @@ def format_for_email(text: str) -> str:
 def handle_email_formatting():
     """Handle the Ctrl+Alt+Shift+E shortcut for email formatting."""
     try:
+        print("Starting email formatting...")
+        
         # Store original clipboard content
         original_clipboard = pyperclip.paste()
         
+        # Platform-specific copy shortcut
+        copy_key = "cmd" if sys.platform == "darwin" else "ctrl"
+        
         # Copy current selection to clipboard
-        pyautogui.hotkey("ctrl", "c")
-        time.sleep(0.2)  # Increased delay to ensure clipboard is updated
+        pyautogui.hotkey(copy_key, "c")
+        time.sleep(0.5)  # Longer delay to ensure clipboard is updated
         
         # Get the selected text from clipboard
         selected_text = pyperclip.paste()
+        
+        print(f"Original clipboard length: {len(original_clipboard)}")
+        print(f"Selected text length: {len(selected_text)}")
         
         # Check if we actually got new text (different from original clipboard)
         if selected_text.strip() and selected_text != original_clipboard:
@@ -100,58 +108,37 @@ def handle_email_formatting():
             pyperclip.copy(formatted_text)
             
             # Paste the formatted text (replacing the selection)
-            pyautogui.hotkey("ctrl", "v")
+            pyautogui.hotkey(copy_key, "v")
             
-            print(f"Email formatting applied successfully!")
+            print(f"Email formatting completed successfully!")
             
         elif selected_text.strip():
             # Text might be the same as clipboard, still process it
-            print(f"Processing clipboard text: {selected_text[:50]}...")
+            print(f"Processing existing clipboard text: {selected_text[:50]}...")
             formatted_text = format_for_email(selected_text)
             pyperclip.copy(formatted_text)
-            pyautogui.hotkey("ctrl", "v")
-            print(f"Email formatting applied!")
+            pyautogui.hotkey(copy_key, "v")
+            print(f"Email formatting completed!")
         else:
-            print("No text selected for email formatting")
+            print("No text available for email formatting")
             # Restore original clipboard if nothing was selected
             pyperclip.copy(original_clipboard)
             
     except Exception as e:
         print(f"Error in email formatting: {e}")
+        import traceback
+        traceback.print_exc()
 
-# Global variables to track email formatting shortcut
-ctrl_pressed = False
-alt_pressed = False
-shift_pressed = False
-
-def on_email_key_press(key):
-    """Handle key press events for email formatting shortcut."""
-    global ctrl_pressed, alt_pressed, shift_pressed
+def format_transcription(transcription, hotkey):
+    """Format the transcription based on AI model or return as-is."""
+    if hotkey.ai_formatting_requested:
+        formatted_text = format_with_context(transcription)
+        display_text = f"[AI] {formatted_text}"
+    else:
+        formatted_text = transcription.strip()
+        display_text = formatted_text
     
-    try:
-        if key == keyboard.Key.ctrl_l or key == keyboard.Key.ctrl_r:
-            ctrl_pressed = True
-        elif key == keyboard.Key.alt_l or key == keyboard.Key.alt_r:
-            alt_pressed = True
-        elif key == keyboard.Key.shift_l or key == keyboard.Key.shift_r:
-            shift_pressed = True
-        elif hasattr(key, 'char') and key.char and key.char.lower() == 'e':
-            if ctrl_pressed and alt_pressed and shift_pressed:
-                print("Ctrl+Alt+Shift+E detected - formatting email...")
-                handle_email_formatting()
-    except AttributeError:
-        pass
-
-def on_email_key_release(key):
-    """Handle key release events for email formatting."""
-    global ctrl_pressed, alt_pressed, shift_pressed
-    
-    if key == keyboard.Key.ctrl_l or key == keyboard.Key.ctrl_r:
-        ctrl_pressed = False
-    elif key == keyboard.Key.alt_l or key == keyboard.Key.alt_r:
-        alt_pressed = False
-    elif key == keyboard.Key.shift_l or key == keyboard.Key.shift_r:
-        shift_pressed = False
+    return formatted_text, display_text
 
 def main():
     dotenv_path = os.path.join(os.path.dirname(__file__), '.env')
@@ -164,7 +151,9 @@ def main():
     root.destroy()
 
     transcriber = WhisperAPITranscriber.create(use_vad=use_vad)
-    hotkey = create_keylistener(transcriber)
+    
+    # Create hotkey listener with email handler callback
+    hotkey = create_keylistener(transcriber, handle_email_formatting)
     console_table = ConsoleTable()
 
     async def transcription_loop():
@@ -174,13 +163,7 @@ def main():
                 await asyncio.sleep(0.1)
                 # Only process if we have a non-empty transcription
                 if transcription.strip():
-                    # Check if AI formatting was requested via hotkey
-                    if hotkey.ai_formatting_requested:
-                        formatted_text = format_with_context(transcription)
-                        display_text = f"[AI] {formatted_text}"
-                    else:
-                        formatted_text = transcription.strip()
-                        display_text = formatted_text
+                    formatted_text, display_text = format_transcription(transcription, hotkey)
                     
                     # Copy the formatted text to clipboard
                     pyperclip.copy(formatted_text)
@@ -198,28 +181,18 @@ def main():
     loop = asyncio.get_event_loop()
     loop.create_task(transcription_loop())
 
-    # Set up the email formatting shortcut listener
-    email_listener = keyboard.Listener(
-        on_press=on_email_key_press, 
-        on_release=on_email_key_release
-    )
-    email_listener.start()
-
-    with keyboard.Listener() as listener:
-        def for_canonical(f):
-            return lambda k, injected=None: f(listener.canonical(k))
-
-        listener.on_press = for_canonical(hotkey.press)
-        listener.on_release = for_canonical(hotkey.release)
-        
-        print("UtterType AI started...")
-        print("Email formatting shortcut: Ctrl+Alt+Shift+E (select text first)")
-        
-        try:
-            loop.run_forever()
-        except KeyboardInterrupt:
-            email_listener.stop()
-            print("\nShutting down...")
+    # Start all hotkey listeners
+    hotkey.start_listeners()
+    
+    print("UtterType AI started...")
+    print("Voice transcription: Ctrl+Alt+Q (basic) | Ctrl+Alt+A (AI formatting)")
+    print("Email formatting: Ctrl+Alt+Shift+E (select text first)")
+    
+    try:
+        loop.run_forever()
+    except KeyboardInterrupt:
+        hotkey.stop_listeners()
+        print("\nShutting down...")
 
 if __name__ == "__main__":
     main()

@@ -1,6 +1,9 @@
 import os
 import sys
 from pynput.keyboard import HotKey
+from logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 class HoldHotKey(HotKey):
@@ -47,16 +50,21 @@ class HoldGlobeKey:
         self.press(key)
 
 
-def create_keylistener(transcriber, env_var="UTTERTYPE_RECORD_HOTKEYS"):
-    key_code = os.getenv(env_var, "")
+def create_keylistener(transcriber, config):
+    """Create a key listener using the provided configuration."""
+    key_code = config.record_hotkeys
 
+    logger.debug(f"Creating key listener with hotkey: {key_code}")
+    
     if (sys.platform == "darwin") and (key_code in ["<globe>", ""]):
+        logger.info("Using globe key for macOS")
         return HoldGlobeKey(
             on_activate=transcriber.start_recording,
             on_deactivate=transcriber.stop_recording,
         )
 
     key_code = key_code if key_code else "<ctrl>+<alt>+v"
+    logger.info(f"Using hotkey: {key_code}")
 
     return HoldHotKey(
           HoldHotKey.parse(key_code),

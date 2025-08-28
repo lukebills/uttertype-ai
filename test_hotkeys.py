@@ -1,25 +1,40 @@
 #!/usr/bin/env python3
 """
 Test script for UtterType AI hotkeys
-This script will test the hotkey detection without requiring the full transcription setup.
+This sc    # Load environment variables if .env exists
+    dotenv_path = os.path.join(os.path.dirname(__file__), '.env')
+    if os.path.exists(dotenv_path):
+        load_dotenv(dotenv_path)
+        logger.info("Loaded configuration from .env file")
+    else:
+        logger.warning("No .env file found, using default hotkeys")
+    
+    logger.info("UtterType AI Hotkey Test")
+    logger.info("=" * 40)
+    
+    test_hotkeys()st the hotkey detection without requiring the full transcription setup.
 """
 
 import os
 import time
 from dotenv import load_dotenv
 from pynput import keyboard
+from logging_config import get_logger
+
+# Initialize logger for this module
+logger = get_logger(__name__)
 
 class MockTranscriber:
     """Mock transcriber for testing purposes."""
     def start_recording(self):
-        print("🎤 Mock recording started!")
+        logger.info("🎤 Mock recording started!")
     
     def stop_recording(self):
-        print("⏹️ Mock recording stopped!")
+        logger.info("⏹️ Mock recording stopped!")
 
 def mock_email_handler():
     """Mock email handler for testing purposes."""
-    print("📧 Mock email formatting triggered!")
+    logger.info("📧 Mock email formatting triggered!")
 
 def test_hotkeys():
     """Test individual hotkeys using GlobalHotKeys directly."""
@@ -29,20 +44,20 @@ def test_hotkeys():
     ai_hotkey = os.getenv('UTTERTYPE_AI_HOTKEYS', '<ctrl>+<alt>+a')
     email_hotkey = os.getenv('UTTERTYPE_EMAIL_HOTKEY', '<ctrl>+<alt>+<shift>+e')
     
-    print(f"Testing hotkeys:")
-    print(f"  Normal recording: {normal_hotkey}")
-    print(f"  AI recording: {ai_hotkey}")
-    print(f"  Email formatting: {email_hotkey}")
+    logger.info(f"Testing hotkeys:")
+    logger.info(f"  Normal recording: {normal_hotkey}")
+    logger.info(f"  AI recording: {ai_hotkey}")
+    logger.info(f"  Email formatting: {email_hotkey}")
     
     # Create test functions
     def test_normal():
-        print("✅ Normal recording hotkey triggered!")
+        logger.info("✅ Normal recording hotkey triggered!")
     
     def test_ai():
-        print("✅ AI recording hotkey triggered!")
+        logger.info("✅ AI recording hotkey triggered!")
     
     def test_email():
-        print("✅ Email formatting hotkey triggered!")
+        logger.info("✅ Email formatting hotkey triggered!")
     
     # Create hotkey listeners
     hotkeys = [
@@ -55,17 +70,17 @@ def test_hotkeys():
     for hotkey in hotkeys:
         hotkey.start()
     
-    print("\nHotkey listeners started! Press the hotkeys to test them.")
-    print("Press Ctrl+C to exit.\n")
+    logger.info("Hotkey listeners started! Press the hotkeys to test them.")
+    logger.info("Press Ctrl+C to exit.")
     
     try:
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
-        print("\nStopping hotkey listeners...")
+        logger.info("Stopping hotkey listeners...")
         for hotkey in hotkeys:
             hotkey.stop()
-        print("Test completed!")
+        logger.info("Test completed!")
 
 def main():
     # Load environment variables if .env exists

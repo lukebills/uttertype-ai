@@ -4,6 +4,10 @@ from rich.console import Console
 from rich.table import Table
 from rich.text import Text
 from datetime import datetime
+from logging_config import get_logger
+
+# Initialize logger for this module
+logger = get_logger(__name__)
 
 
 class ConsoleTable:
@@ -56,4 +60,6 @@ class ConsoleTable:
         # Clear the console and reprint the table
         self.console.clear()
         self.console.print(self.centered_table)
-        # Text("API Error", style="bold red")
+        
+        # Log the transcription entry
+        logger.debug(f"Added transcription entry: {transcription[:50]}... Cost: ${cost}")

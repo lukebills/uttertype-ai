@@ -8,8 +8,12 @@ import asyncio
 from threading import Thread, Event
 import webrtcvad
 from utils import transcription_concat
+from logging_config import get_logger
 import tempfile
 import time
+
+# Initialize logger for this module
+logger = get_logger(__name__)
 
 FORMAT = pyaudio.paInt16  # Audio format
 CHANNELS = 1  # Mono audio
@@ -171,7 +175,7 @@ class WhisperAPITranscriber(AudioTranscriber):
                 return transcription.replace(prompt, "").strip()
             return transcription
         except Exception as e:
-            #print(f"Encountered Error: {e}")
+            logger.error(f"Whisper API transcription failed: {e}", exc_info=True)
             return ""
 
 
@@ -190,6 +194,6 @@ class WhisperAPITranscriber(AudioTranscriber):
                 os.unlink(tmpfile.name)
             return transcription
         except Exception as e:
-            #print(f"Encountered Error: {e}")
+            logger.error(f"Local MLX transcription failed: {e}", exc_info=True)
             return "" 
 """

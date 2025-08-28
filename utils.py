@@ -4,6 +4,10 @@ import pyperclip
 import pyautogui
 from typing import List
 from pynput import keyboard
+from logging_config import get_logger
+
+# Initialize logger for this module
+logger = get_logger(__name__)
 
 keyboard_writer = keyboard.Controller()
 
@@ -15,7 +19,7 @@ def clipboard_type(text):
     """
     original_clipboard_content = pyperclip.paste()
     pyperclip.copy(text)
-    print("Pasting:", text)
+    logger.debug(f"Pasting text: {text[:50]}...")
     pyautogui.hotkey("command" if sys.platform == "darwin" else "ctrl", "v")
     pyperclip.copy(original_clipboard_content)
 

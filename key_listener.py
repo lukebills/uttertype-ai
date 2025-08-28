@@ -5,6 +5,10 @@ import threading
 from pynput.keyboard import HotKey
 from pynput import keyboard
 from transcriber import WhisperAPITranscriber
+from logging_config import get_logger
+
+# Initialize logger for this module
+logger = get_logger(__name__)
 
 
 class HoldHotKey(HotKey):
@@ -102,7 +106,7 @@ class KeyListener:
     def _start_normal_recording(self):
         """Start recording with normal formatting."""
         if not self.recording and not self.normal_hotkey_held:
-            print("Normal recording started...")
+            logger.info("Normal recording started")
             self.recording = True
             self.ai_formatting_requested = False
             self.normal_hotkey_held = True
@@ -112,7 +116,7 @@ class KeyListener:
     def _start_ai_recording(self):
         """Start recording with AI formatting."""
         if not self.recording and not self.ai_hotkey_held:
-            print("AI recording started...")
+            logger.info("AI recording started")
             self.recording = True
             self.ai_formatting_requested = True
             self.ai_hotkey_held = True
@@ -146,7 +150,7 @@ class KeyListener:
     def _stop_recording(self):
         """Stop recording."""
         if self.recording:
-            print("Recording stopped...")
+            logger.info("Recording stopped")
             self.recording = False
             self.normal_hotkey_held = False
             self.ai_hotkey_held = False
@@ -163,11 +167,11 @@ class KeyListener:
         
         # Debounce: ignore if triggered within 2 seconds
         if current_time - self.last_email_trigger < 2.0:
-            print("Email hotkey debounced - ignoring rapid trigger")
+            logger.debug("Email hotkey debounced - ignoring rapid trigger")
             return
             
         self.last_email_trigger = current_time
-        print("Email hotkey triggered!")
+        logger.info("Email hotkey triggered")
         
         if self.email_handler_callback:
             # Run in separate thread to avoid blocking
@@ -177,13 +181,13 @@ class KeyListener:
         """Start all hotkey listeners."""
         for name, hotkey in self.hotkeys.items():
             hotkey.start()
-            print(f"Started {name} hotkey listener")
+            logger.debug(f"Started {name} hotkey listener")
     
     def stop_listeners(self):
         """Stop all hotkey listeners."""
         for name, hotkey in self.hotkeys.items():
             hotkey.stop()
-            print(f"Stopped {name} hotkey listener")
+            logger.debug(f"Stopped {name} hotkey listener")
         
         # Stop release listener if active
         if self.key_release_listener:
@@ -264,12 +268,12 @@ class ManualKeyListener:
             if not self.recording:
                 # Check for exact matches with either hotkey combination
                 if self._check_hotkey(self.pressed_keys, self.normal_keys):
-                    print("Normal hotkey detected!")
+                    logger.debug("Normal hotkey detected")
                     self.recording = True
                     self.ai_formatting_requested = False
                     self.transcriber.start_recording()
                 elif self._check_hotkey(self.pressed_keys, self.ai_keys):
-                    print("AI hotkey detected!")
+                    logger.debug("AI hotkey detected")
                     self.recording = True
                     self.ai_formatting_requested = True
                     self.transcriber.start_recording()

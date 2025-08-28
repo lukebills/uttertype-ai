@@ -20,7 +20,7 @@ def format_with_context(text: str) -> str:
     client = OpenAI(base_url=os.getenv('OPENAI_BASE_URL'))
     
     # Use configurable model instead of hard-coded
-    model = os.getenv('OPENAI_CHAT_MODEL', 'gpt-4o-mini-2024-07-18')
+    model = os.getenv('OPENAI_CHAT_MODEL', 'gpt-4o')
     
     # Simplified, more effective prompt
     prompt = (
@@ -50,7 +50,7 @@ def format_for_email(text: str) -> str:
     """Format and grammar check text specifically for email communication."""
     client = OpenAI(base_url=os.getenv('OPENAI_BASE_URL'))
     
-    model = os.getenv('OPENAI_CHAT_MODEL', 'gpt-4o-mini-2024-07-18')
+    model = os.getenv('OPENAI_CHAT_MODEL', 'gpt-4o')
     
     prompt = (
         "Review and rewrite the following text for professional email communication. "

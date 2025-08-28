@@ -5,24 +5,14 @@ from rich.live import Live
 from rich.table import Table
 from rich.text import Text
 from datetime import datetime
-from logging_config import get_logger
-
-logger = get_logger(__name__)
 
 
 class ConsoleTable:
-    def __init__(self, config=None):
-        if config is None:
-            from config import get_config
-            config = get_config()
-            
-        self.config = config
+    def __init__(self, total_cost_decimals: int = 6):
         self.console = Console()
         self.table = Table(show_footer=False)
         self.total_cost = 0
-        self.total_cost_decimals = 6  # Default for cost display
-        
-        logger.debug("ConsoleTable initialized")
+        self.total_cost_decimals = total_cost_decimals
 
     def _update_cost(self, cost: float):
         self.total_cost += cost
@@ -69,15 +59,6 @@ class ConsoleTable:
     def insert(self, transcription: str, cost: float):
         current_datetime = datetime.now()
         formatted_datetime = current_datetime.strftime("%dth %B, %I:%M%p")
-        
-        # Truncate transcription if it's too long
-        if len(transcription) > self.config.max_display_text_length:
-            display_text = transcription[:self.config.max_display_text_length] + "..."
-            logger.debug(f"Truncated transcription from {len(transcription)} to {len(display_text)} characters")
-        else:
-            display_text = transcription
-            
-        self.table.add_row(formatted_datetime, display_text, f"${cost}")
+        self.table.add_row(formatted_datetime, transcription, f"${cost}")
         self._update_cost(cost)
-        logger.debug(f"Added transcription to table: cost=${cost}")
         # Text("API Error", style="bold red")

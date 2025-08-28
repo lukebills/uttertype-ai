@@ -1,6 +1,6 @@
 import os
 import io
-from typing import List, Tuple, Optional
+from typing import List, Tuple
 import pyaudio
 import wave
 from openai import OpenAI
@@ -9,24 +9,19 @@ from threading import Thread, Event
 import webrtcvad
 from utils import transcription_concat
 import tempfile
-from logging_config import get_logger
-
-logger = get_logger(__name__)
 
 FORMAT = pyaudio.paInt16  # Audio format
 CHANNELS = 1  # Mono audio
 RATE = 16000  # Sample rate
 CHUNK_DURATION_MS = 30  # Frame duration in milliseconds
 CHUNK = int(RATE * CHUNK_DURATION_MS / 1000)
+MIN_TRANSCRIPTION_SIZE_MS = int(
+    os.getenv('UTTERTYPE_MIN_TRANSCRIPTION_SIZE_MS', 1500) # Minimum duration of speech to send to API in case of silence
+)
 
 
 class AudioTranscriber:
-    def __init__(self, config=None):
-        if config is None:
-            from config import get_config
-            config = get_config()
-        
-        self.config = config
+    def __init__(self):
         self.audio = pyaudio.PyAudio()
         self.recording_finished = Event()  # Threading event to end recording
         self.recording_finished.set()  # Initialize as finished
@@ -37,8 +32,6 @@ class AudioTranscriber:
         self.event_loop = asyncio.get_event_loop()
         self.vad = webrtcvad.Vad(1)  # Voice Activity Detector, mode can be 0 to 3
         self.transcriptions = asyncio.Queue()
-        
-        logger.debug(f"AudioTranscriber initialized with min transcription size: {config.min_transcription_size_ms}ms")
 
     def start_recording(self):
         """Start recording audio from the microphone."""
@@ -63,7 +56,7 @@ class AudioTranscriber:
                 current_audio_duration = len(self.frames) * CHUNK_DURATION_MS
                 if (
                     not is_speech
-                    and current_audio_duration >= self.config.min_transcription_size_ms
+                    and current_audio_duration >= MIN_TRANSCRIPTION_SIZE_MS
                 ):  # silence
                     rolling_request = Thread(
                         target=self._intermediate_transcription,
@@ -138,29 +131,21 @@ class AudioTranscriber:
 
 
 class WhisperAPITranscriber(AudioTranscriber):
-    def __init__(self, config, *args, **kwargs):
+    def __init__(self, base_url, model_name, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        
-        self.config = config
-        self.model_name = config.openai_model_name
-        self.client = OpenAI(
-            api_key=config.openai_api_key,
-            base_url=config.openai_base_url
-        )
-        logger.info(f"WhisperAPITranscriber initialized with model: {self.model_name}")
+
+        self.model_name = model_name
+        self.client = OpenAI(base_url=base_url)
 
     @staticmethod
-    def create(config=None):
-        """Create WhisperAPITranscriber with configuration."""
-        if config is None:
-            from config import get_config
-            config = get_config()
-        
-        return WhisperAPITranscriber(config)
+    def create(*args, **kwargs):
+        base_url = os.getenv('OPENAI_BASE_URL', 'https://api.openai.com/v1')
+        model_name = os.getenv('OPENAI_MODEL_NAME', 'whisper-1')
+
+        return WhisperAPITranscriber(base_url, model_name)
 
     def transcribe_audio(self, audio: io.BytesIO) -> str:
         try:
-            logger.debug("Starting audio transcription")
             transcription = self.client.audio.transcriptions.create(
                 model=self.model_name,
                 file=audio,
@@ -168,10 +153,9 @@ class WhisperAPITranscriber(AudioTranscriber):
                 language="en",
                 prompt="The following is normal speech or technical speech from an engineer.",
             )
-            logger.debug(f"Transcription completed: '{transcription[:50]}...' ({len(transcription)} chars)")
             return transcription
         except Exception as e:
-            logger.error(f"Transcription error: {e}")
+            print(f"Encountered Error: {e}")
             return ""
 
 
